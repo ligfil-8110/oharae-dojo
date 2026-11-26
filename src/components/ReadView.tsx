@@ -33,7 +33,8 @@ interface ReadViewProps {
   onChangeWritingMode: (mode: WritingMode) => void;
   onChangeRubyMode: (mode: RubyMode) => void;
   onChangeFontSize: (size: FontSize) => void;
-  onPlaySection: (phrases: Phrase[]) => void;
+  onPlaySection: (section: Section) => void;
+  onPlayAllVisible: (sections: Section[]) => void;
   onPlayPhrase: (phrase: Phrase) => void;
   onStopAudio: () => void;
   onToggleWeak: (phraseId: string) => void;
@@ -54,6 +55,7 @@ export function ReadView({
   onChangeRubyMode,
   onChangeFontSize,
   onPlaySection,
+  onPlayAllVisible,
   onPlayPhrase,
   onStopAudio,
   onToggleWeak,
@@ -164,7 +166,7 @@ export function ReadView({
           <button
             type="button"
             className="btn btn-sm btn-ai"
-            onClick={() => onPlaySection(visibleSections.flatMap((s) => s.phrases))}
+            onClick={() => onPlayAllVisible(visibleSections)}
           >
             <Play size={14} />
             <span>表示範囲を通し再生</span>
@@ -274,7 +276,7 @@ export function ReadView({
                 <button
                   type="button"
                   className="btn btn-sm"
-                  onClick={() => onPlaySection(sec.phrases)}
+                  onClick={() => onPlaySection(sec)}
                 >
                   <Volume2 size={15} />
                   <span>この段を再生</span>

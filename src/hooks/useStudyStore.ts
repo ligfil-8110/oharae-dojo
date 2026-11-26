@@ -23,7 +23,7 @@ function getDefaultExamDate(): string {
 }
 
 export const DEFAULT_SETTINGS: StudySettings = {
-  preset: 'noru',
+  preset: 'maosu',
   includeFramingLines: false,
   rubyMode: 'historical',
   writingMode: 'horizontal',
@@ -39,9 +39,17 @@ function getInitialStore(): StudyStoreData {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<StudyStoreData>;
+      const mergedSettings: StudySettings = {
+        ...DEFAULT_SETTINGS,
+        ...(parsed.settings ?? {}),
+      };
+      // Migrate v1 users (who defaulted to 'noru') to 'maosu' while preserving progress
+      if ((parsed.version ?? 1) < 2) {
+        mergedSettings.preset = 'maosu';
+      }
       return {
-        version: 1,
-        settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+        version: 2,
+        settings: mergedSettings,
         progress: parsed.progress ?? {},
         customOverrides: parsed.customOverrides ?? {},
         completedDays: Array.isArray(parsed.completedDays) ? parsed.completedDays : [],
@@ -51,7 +59,7 @@ function getInitialStore(): StudyStoreData {
     // Ignore corrupted storage and fall back to defaults
   }
   return {
-    version: 1,
+    version: 2,
     settings: DEFAULT_SETTINGS,
     progress: {},
     customOverrides: {},
@@ -194,7 +202,7 @@ export function useStudyStore() {
       const parsed = JSON.parse(jsonStr) as Partial<StudyStoreData>;
       if (!parsed || typeof parsed !== 'object') return false;
       setStore({
-        version: 1,
+        version: 2,
         settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
         progress: parsed.progress ?? {},
         customOverrides: parsed.customOverrides ?? {},

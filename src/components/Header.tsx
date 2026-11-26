@@ -56,7 +56,7 @@ export function Header({
               <div>
                 <h1 className="brand-title">大祓詞 暗記道場</h1>
                 <div className="brand-sub">
-                  {settings.preset === 'noru' ? '結び「宣る」標準形' : '神社本庁例文「白す」形'} ・ 習得率 {masteryPercent}%
+                  {settings.preset === 'maosu' ? '神社本庁「白す」形' : '宣読体「宣る」形'} ・ 習得率 {masteryPercent}%
                 </div>
               </div>
             </div>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'oharae-dojo-v1';
+const CACHE_NAME = 'oharae-dojo-v2';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -32,6 +32,11 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // Let browser stream/seek MP3 audio natively without SW interception
+  if (request.headers.has('range') || url.pathname.endsWith('.mp3')) {
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(

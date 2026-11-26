@@ -1,15 +1,20 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { AudioView } from './components/AudioView.tsx';
 import { ClozeView } from './components/ClozeView.tsx';
 import { ExamView } from './components/ExamView.tsx';
 import { Header } from './components/Header.tsx';
+import { MiniAudioPlayer } from './components/MiniAudioPlayer.tsx';
 import { PhraseEditorModal } from './components/PhraseEditorModal.tsx';
 import { PlanView } from './components/PlanView.tsx';
 import { ReadView } from './components/ReadView.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
+import { PHRASE_AUDIO_TIMESTAMPS } from './data/audioTimestamps.ts';
+import { useAudioTrack } from './hooks/useAudioTrack.ts';
 import { useSpeechSynthesis } from './hooks/useSpeechSynthesis.ts';
 import { useStudyStore } from './hooks/useStudyStore.ts';
-import type { AppTab, Phrase } from './types.ts';
+import type { AppTab, Phrase, Section } from './types.ts';
+
+const MINI_SPEEDS = [0.75, 0.9, 1.0, 1.15];
 
 export function App() {
   const {
@@ -36,11 +41,67 @@ export function App() {
   const [editingPhrase, setEditingPhrase] = useState<Phrase | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  const realAudio = useAudioTrack();
   const tts = useSpeechSynthesis({
     rate: store.settings.speechRate,
     pauseSec: store.settings.shadowingPauseSec,
     customOverrides: store.customOverrides,
   });
+
+  const handlePlayPhrasePreferReal = useCallback(
+    (phrase: Phrase) => {
+      if (store.settings.preset === 'maosu' && PHRASE_AUDIO_TIMESTAMPS[phrase.id]) {
+        tts.stop();
+        realAudio.playPhrase(phrase.id, false);
+        return;
+      }
+      realAudio.stop();
+      tts.speakSingle(phrase);
+    },
+    [store.settings.preset, realAudio, tts]
+  );
+
+  const handlePlaySectionPreferReal = useCallback(
+    (section: Section) => {
+      if (store.settings.preset === 'maosu' && realAudio.playSection(section, false)) {
+        tts.stop();
+        return;
+      }
+      realAudio.stop();
+      tts.playPhrases(section.phrases);
+    },
+    [store.settings.preset, realAudio, tts]
+  );
+
+  const handlePlayAllVisiblePreferReal = useCallback(
+    (visibleSections: Section[]) => {
+      if (store.settings.preset === 'maosu' && visibleSections.length > 0) {
+        const firstRange = PHRASE_AUDIO_TIMESTAMPS[visibleSections[0].phrases[0]?.id ?? ''];
+        const lastSec = visibleSections[visibleSections.length - 1];
+        const lastPhrase = lastSec.phrases[lastSec.phrases.length - 1];
+        const lastRange = PHRASE_AUDIO_TIMESTAMPS[lastPhrase?.id ?? ''];
+        if (firstRange && lastRange) {
+          tts.stop();
+          realAudio.playRange(firstRange.start, lastRange.end, { loop: false });
+          return;
+        }
+      }
+      realAudio.stop();
+      tts.playPhrases(visibleSections.flatMap((s) => s.phrases));
+    },
+    [store.settings.preset, realAudio, tts]
+  );
+
+  const handleStopAllAudio = useCallback(() => {
+    realAudio.stop();
+    tts.stop();
+  }, [realAudio, tts]);
+
+  const handleCycleMiniSpeed = useCallback(() => {
+    const idx = MINI_SPEEDS.findIndex((s) => Math.abs(s - realAudio.playbackRate) < 0.05);
+    const next = MINI_SPEEDS[(idx + 1) % MINI_SPEEDS.length];
+    realAudio.setPlaybackRate(next);
+  }, [realAudio]);
 
   const handleJumpToStudy = (tab: AppTab, sectionIds?: string[], onlyWeak = false) => {
     setFocusSectionIds(sectionIds ?? null);
@@ -49,8 +110,13 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const combinedPlaying = realAudio.isPlaying || tts.isPlaying;
+  const combinedPlayingPhraseId = realAudio.isPlaying
+    ? realAudio.activePhraseId
+    : tts.playingPhraseId ?? realAudio.activePhraseId;
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${realAudio.hasStarted ? 'with-mini-player' : ''}`}>
       <Header
         activeTab={activeTab}
         onSelectTab={(tab) => {
@@ -91,14 +157,15 @@ export function App() {
             rubyMode={store.settings.rubyMode}
             fontSize={store.settings.fontSize}
             progress={store.progress}
-            playingPhraseId={tts.playingPhraseId}
-            isPlaying={tts.isPlaying}
+            playingPhraseId={combinedPlayingPhraseId}
+            isPlaying={combinedPlaying}
             onChangeWritingMode={(writingMode) => updateSettings({ writingMode })}
             onChangeRubyMode={(rubyMode) => updateSettings({ rubyMode })}
             onChangeFontSize={(fontSize) => updateSettings({ fontSize })}
-            onPlaySection={(phrases) => tts.playPhrases(phrases)}
-            onPlayPhrase={(phrase) => tts.speakSingle(phrase)}
-            onStopAudio={tts.stop}
+            onPlaySection={handlePlaySectionPreferReal}
+            onPlayAllVisible={handlePlayAllVisiblePreferReal}
+            onPlayPhrase={handlePlayPhrasePreferReal}
+            onStopAudio={handleStopAllAudio}
             onToggleWeak={toggleWeakBookmark}
             onEditPhrase={(phrase) => setEditingPhrase(phrase)}
           />
@@ -116,7 +183,7 @@ export function App() {
             onChangeRubyMode={(rubyMode) => updateSettings({ rubyMode })}
             onChangeWritingMode={(writingMode) => updateSettings({ writingMode })}
             onGradePhrase={setPhraseMastery}
-            onPlayPhrase={(phrase) => tts.speakSingle(phrase)}
+            onPlayPhrase={handlePlayPhrasePreferReal}
           />
         )}
 
@@ -129,17 +196,19 @@ export function App() {
             speechRate={store.settings.speechRate}
             shadowingPauseSec={store.settings.shadowingPauseSec}
             isTtsSupported={tts.isSupported}
-            isPlaying={tts.isPlaying}
-            isPausedBetween={tts.isPausedBetween}
-            playingPhraseId={tts.playingPhraseId}
-            loop={tts.loop}
+            isTtsPlaying={tts.isPlaying}
+            isTtsPausedBetween={tts.isPausedBetween}
+            ttsPlayingPhraseId={tts.playingPhraseId}
+            ttsLoop={tts.loop}
+            realAudio={realAudio}
             onChangeSpeechRate={(speechRate) => updateSettings({ speechRate })}
             onChangeShadowingPause={(shadowingPauseSec) =>
               updateSettings({ shadowingPauseSec })
             }
-            onToggleLoop={tts.setLoop}
-            onPlayPhrases={(phrases) => tts.playPhrases(phrases)}
-            onStopAudio={tts.stop}
+            onToggleTtsLoop={tts.setLoop}
+            onPlayTtsPhrases={(phrases) => tts.playPhrases(phrases)}
+            onStopTts={tts.stop}
+            onPlaySamplePhrase={handlePlayPhrasePreferReal}
             onMarkPhraseStatus={setPhraseMastery}
           />
         )}
@@ -154,6 +223,22 @@ export function App() {
           />
         )}
       </main>
+
+      <MiniAudioPlayer
+        isPlaying={realAudio.isPlaying}
+        hasStarted={realAudio.hasStarted}
+        currentTime={realAudio.currentTime}
+        duration={realAudio.duration}
+        playbackRate={realAudio.playbackRate}
+        activePhraseId={realAudio.activePhraseId}
+        loopRange={realAudio.loopRange}
+        sections={sections}
+        onTogglePlayPause={realAudio.togglePlayPause}
+        onSkipBy={realAudio.skipBy}
+        onCycleRate={handleCycleMiniSpeed}
+        onClearLoop={realAudio.clearLoop}
+        onStop={realAudio.stop}
+      />
 
       {editingPhrase && (
         <PhraseEditorModal

@@ -35,7 +35,7 @@ const HISTORICAL_KANA_MAP: ReadonlyArray<readonly [string, string]> = [
   ['いは', 'いわ'],
   ['いほり', 'いおり'],
   ['おほ', 'おお'],
-  ['まをす', 'まおす'],
+  ['まをす', 'もうす'],
   ['はらへ', 'はらえ'],
   ['はらひ', 'はらい'],
   ['はらふ', 'はらう'],
@@ -97,7 +97,7 @@ export function parseRubyText(input: string, existingTokens?: Token[]): Token[] 
   }
 
   const tokens: Token[] = [];
-  const pattern = /(\*?)([^[\]\s、。・「」*]+)\[([^\]]+)\]/g;
+  const pattern = /(\*?)([\u4E00-\u9FFF々ヶ]+)\[([^\]]+)\]/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 

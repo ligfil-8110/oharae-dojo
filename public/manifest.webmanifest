@@ -1,0 +1,19 @@
+{
+  "name": "大祓詞 暗記道場",
+  "short_name": "大祓詞道場",
+  "description": "7日間で神道の大祓詞を暗記するための学習アプリ",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f4ec",
+  "theme_color": "#b5382a",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

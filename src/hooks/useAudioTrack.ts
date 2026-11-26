@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AUDIO_MARKERS,
   AUDIO_SRC,
-  PHRASE_AUDIO_TIMESTAMPS,
   findPhraseIdAtTime,
+  getEffectiveTimestamps,
   getSectionAudioRange,
 } from '../data/audioTimestamps.ts';
-import type { Section } from '../types.ts';
+import type { CustomPhraseOverride, Section } from '../types.ts';
 
 export interface LoopRange {
   start: number;
@@ -14,10 +14,17 @@ export interface LoopRange {
   label: string;
 }
 
-export function useAudioTrack() {
+export function useAudioTrack(customOverrides?: Record<string, CustomPhraseOverride>) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const loopRangeRef = useRef<LoopRange | null>(null);
   const stopAtRef = useRef<number | null>(null);
+
+  const effectiveTimestamps = useMemo(
+    () => getEffectiveTimestamps(customOverrides),
+    [customOverrides]
+  );
+  const timestampsRef = useRef(effectiveTimestamps);
+  timestampsRef.current = effectiveTimestamps;
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
@@ -73,7 +80,7 @@ export function useAudioTrack() {
     return audio;
   }, [playbackRate]);
 
-  // Smooth time tracking + section/phrase loop & stopAt handling
+  // High-precision time tracking + section/phrase loop & stopAt handling
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -81,7 +88,7 @@ export function useAudioTrack() {
     const syncState = () => {
       const t = audio.currentTime;
       setCurrentTime(t);
-      setActivePhraseId(findPhraseIdAtTime(t));
+      setActivePhraseId(findPhraseIdAtTime(t, timestampsRef.current));
 
       const loop = loopRangeRef.current;
       if (loop && !audio.paused && t >= loop.end) {
@@ -99,7 +106,7 @@ export function useAudioTrack() {
     audio.addEventListener('timeupdate', syncState);
     let intervalId: number | null = null;
     if (isPlaying) {
-      intervalId = window.setInterval(syncState, 150);
+      intervalId = window.setInterval(syncState, 80);
     }
 
     return () => {
@@ -129,9 +136,10 @@ export function useAudioTrack() {
     (startSec: number) => {
       const audio = ensureAudio();
       audio.playbackRate = playbackRate;
-      audio.currentTime = Math.max(0, startSec);
-      setCurrentTime(startSec);
-      setActivePhraseId(findPhraseIdAtTime(startSec));
+      const clampedStart = Math.max(0, startSec);
+      audio.currentTime = clampedStart;
+      setCurrentTime(clampedStart);
+      setActivePhraseId(findPhraseIdAtTime(clampedStart, timestampsRef.current));
       audio.play().catch(() => {
         setError('音声を再生できませんでした。もう一度タップしてください。');
       });
@@ -164,7 +172,7 @@ export function useAudioTrack() {
 
   const playPhrase = useCallback(
     (phraseId: string, loop = false): boolean => {
-      const range = PHRASE_AUDIO_TIMESTAMPS[phraseId];
+      const range = timestampsRef.current[phraseId];
       if (!range) return false;
       playRange(range.start, range.end, { loop, label: loop ? 'この句をリピート' : undefined });
       return true;
@@ -174,7 +182,7 @@ export function useAudioTrack() {
 
   const playSection = useCallback(
     (section: Section, loop = false): boolean => {
-      const range = getSectionAudioRange(section);
+      const range = getSectionAudioRange(section, timestampsRef.current);
       if (!range) return false;
       playRange(range.start, range.end, { loop, label: loop ? `${section.title}` : undefined });
       return true;
@@ -215,7 +223,7 @@ export function useAudioTrack() {
       const clamped = Math.max(0, Math.min(duration, sec));
       audio.currentTime = clamped;
       setCurrentTime(clamped);
-      setActivePhraseId(findPhraseIdAtTime(clamped));
+      setActivePhraseId(findPhraseIdAtTime(clamped, timestampsRef.current));
     },
     [duration, ensureAudio]
   );
@@ -240,6 +248,7 @@ export function useAudioTrack() {
     playbackRate,
     activePhraseId,
     loopRange,
+    effectiveTimestamps,
     error,
     playFull,
     playRange,

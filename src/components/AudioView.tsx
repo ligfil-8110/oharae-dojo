@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
+  CheckCircle2,
   Drum,
   Eye,
   EyeOff,
@@ -14,16 +15,12 @@ import {
   Square,
   Volume2,
 } from 'lucide-react';
-import {
-  AUDIO_CREDIT,
-  AUDIO_MARKERS,
-  PHRASE_AUDIO_TIMESTAMPS,
-} from '../data/audioTimestamps.ts';
+import { AUDIO_CREDIT, AUDIO_MARKERS, type PhraseAudioRange } from '../data/audioTimestamps.ts';
 import type { LoopRange } from '../hooks/useAudioTrack.ts';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition.ts';
 import type { FontSize, MasteryStatus, Phrase, RubyMode, Section } from '../types.ts';
-import { compareRecitation } from '../utils/kanaCompare.ts';
-import { getPhraseKanaText, getPhrasePlainText } from '../utils/rubyParser.ts';
+import { comparePhraseRecitation } from '../utils/kanaCompare.ts';
+import { getPhrasePlainText } from '../utils/rubyParser.ts';
 import { RubyText } from './RubyText.tsx';
 
 interface AudioViewProps {
@@ -46,6 +43,7 @@ interface AudioViewProps {
     playbackRate: number;
     activePhraseId: string | null;
     loopRange: LoopRange | null;
+    effectiveTimestamps: Record<string, PhraseAudioRange>;
     error: string | null;
     playFull: (skipDrum?: boolean) => void;
     playRange: (start: number, end: number, options?: { loop?: boolean; label?: string }) => void;
@@ -101,8 +99,12 @@ export function AudioView({
   const [selectedScope, setSelectedScope] = useState<string>(() =>
     focusSectionIds && focusSectionIds.length === 1 ? focusSectionIds[0] : 'all'
   );
+  const [reciteUnit, setReciteUnit] = useState<'phrase' | 'section'>('phrase');
   const [recitePhraseIdx, setRecitePhraseIdx] = useState(0);
+  const [reciteSectionIdx, setReciteSectionIdx] = useState(0);
   const [hideReciteText, setHideReciteText] = useState(true);
+  const [showCueInitials, setShowCueInitials] = useState(false);
+  const [sessionPassedIds, setSessionPassedIds] = useState<Set<string>>(() => new Set());
   const [autoScroll, setAutoScroll] = useState(true);
 
   const phraseRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -124,15 +126,72 @@ export function AudioView({
     return sec ? sec.phrases : sections.flatMap((s) => s.phrases);
   }, [sections, selectedScope]);
 
+  const activeReciteSections = useMemo(() => {
+    if (selectedScope === 'all') return sections;
+    const sec = sections.find((s) => s.id === selectedScope);
+    return sec ? [sec] : sections;
+  }, [sections, selectedScope]);
+
   const safeReciteIdx = Math.min(recitePhraseIdx, Math.max(0, activePhrases.length - 1));
   const currentRecitePhrase = activePhrases[safeReciteIdx];
 
-  const comparison = useMemo(() => {
-    if (!currentRecitePhrase) return null;
-    const expectedKana = getPhraseKanaText(currentRecitePhrase, 'modern');
-    const expectedKanji = getPhrasePlainText(currentRecitePhrase);
-    return compareRecitation(expectedKana, expectedKanji, rec.combinedTranscript);
-  }, [currentRecitePhrase, rec.combinedTranscript]);
+  const safeReciteSecIdx = Math.min(
+    reciteSectionIdx,
+    Math.max(0, activeReciteSections.length - 1)
+  );
+  const currentReciteSection = activeReciteSections[safeReciteSecIdx];
+
+  const phraseEval = useMemo(() => {
+    if (reciteUnit !== 'phrase' || !currentRecitePhrase) return null;
+    return comparePhraseRecitation(currentRecitePhrase, rec.combinedTranscript);
+  }, [reciteUnit, currentRecitePhrase, rec.combinedTranscript]);
+
+  const sectionEvals = useMemo(() => {
+    if (reciteUnit !== 'section' || !currentReciteSection) return null;
+    const evals = currentReciteSection.phrases.map((ph) => ({
+      phrase: ph,
+      evalResult: comparePhraseRecitation(ph, rec.combinedTranscript),
+    }));
+    const avgScore =
+      evals.length > 0
+        ? Math.round(evals.reduce((sum, e) => sum + e.evalResult.score, 0) / evals.length)
+        : 0;
+    return { evals, avgScore };
+  }, [reciteUnit, currentReciteSection, rec.combinedTranscript]);
+
+  const recordAndAdvancePhrase = (score: number) => {
+    if (!currentRecitePhrase) return;
+    const status: MasteryStatus =
+      score >= 80 ? 'mastered' : score >= 50 ? 'learning' : 'shaky';
+    onMarkPhraseStatus(currentRecitePhrase.id, status);
+    if (score >= 80) {
+      setSessionPassedIds((prev) => new Set(prev).add(currentRecitePhrase.id));
+    }
+    rec.reset();
+    if (safeReciteIdx + 1 < activePhrases.length) {
+      setRecitePhraseIdx(safeReciteIdx + 1);
+    }
+  };
+
+  const recordAndAdvanceSection = () => {
+    if (!currentReciteSection || !sectionEvals) return;
+    const nextPassed = new Set(sessionPassedIds);
+    for (const item of sectionEvals.evals) {
+      const st: MasteryStatus =
+        item.evalResult.score >= 80
+          ? 'mastered'
+          : item.evalResult.score >= 50
+          ? 'learning'
+          : 'shaky';
+      onMarkPhraseStatus(item.phrase.id, st);
+      if (st === 'mastered') nextPassed.add(item.phrase.id);
+    }
+    setSessionPassedIds(nextPassed);
+    rec.reset();
+    if (safeReciteSecIdx + 1 < activeReciteSections.length) {
+      setReciteSectionIdx(safeReciteSecIdx + 1);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -168,6 +227,7 @@ export function AudioView({
             onChange={(e) => {
               setSelectedScope(e.target.value);
               setRecitePhraseIdx(0);
+              setReciteSectionIdx(0);
               rec.reset();
             }}
           >
@@ -183,7 +243,6 @@ export function AudioView({
 
       {subMode === 'real' ? (
         <>
-          {/* Real Recording Controller Card */}
           <div className="card" style={{ borderLeft: '4px solid var(--shu)' }}>
             <div
               style={{
@@ -237,7 +296,6 @@ export function AudioView({
               </div>
             )}
 
-            {/* Quick Start Buttons */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
               <button
                 type="button"
@@ -287,7 +345,6 @@ export function AudioView({
               </button>
             </div>
 
-            {/* Seek & Transport */}
             <div
               style={{
                 padding: '12px 14px',
@@ -401,10 +458,11 @@ export function AudioView({
             )}
           </div>
 
-          {/* Synchronized Section & Phrase List */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {sections.map((sec) => {
-              const hasRealAudio = sec.phrases.some((p) => Boolean(PHRASE_AUDIO_TIMESTAMPS[p.id]));
+              const hasRealAudio = sec.phrases.some(
+                (p) => Boolean(realAudio.effectiveTimestamps[p.id])
+              );
               return (
                 <div key={sec.id} className="card">
                   <div
@@ -463,7 +521,7 @@ export function AudioView({
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {sec.phrases.map((phrase) => {
-                      const ts = PHRASE_AUDIO_TIMESTAMPS[phrase.id];
+                      const ts = realAudio.effectiveTimestamps[phrase.id];
                       const active = realAudio.activePhraseId === phrase.id;
 
                       return (
@@ -675,6 +733,7 @@ export function AudioView({
           </div>
         </div>
       ) : (
+        /* Upgraded Speech Recognition Recitation Check */
         <div className="card">
           <div
             style={{
@@ -687,46 +746,97 @@ export function AudioView({
             }}
           >
             <div>
-              <h2 className="section-heading" style={{ margin: 0 }}>
-                マイク暗唱チェック
-              </h2>
-              <p className="muted" style={{ margin: '2px 0 0' }}>
-                本文を隠して声に出し、認識結果との一致率をチェックします（{safeReciteIdx + 1} /{' '}
-                {activePhrases.length}句）。
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
+                <h2 className="section-heading" style={{ margin: 0 }}>
+                  マイク暗唱チェック
+                </h2>
+                <span className="pill-badge matsu">
+                  このセッション合格: {sessionPassedIds.size}句
+                </span>
+              </div>
+              <p className="muted" style={{ margin: 0 }}>
+                声に出して暗唱し、語句ごとの一致率で「覚えられているか」をリアルタイム判定します。
               </p>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+
+            <div className="seg-group">
               <button
                 type="button"
-                className="btn btn-sm"
-                onClick={() => setHideReciteText((v) => !v)}
+                className={`seg-btn ${reciteUnit === 'phrase' ? 'active' : ''}`}
+                onClick={() => {
+                  rec.reset();
+                  setReciteUnit('phrase');
+                }}
               >
-                {hideReciteText ? <Eye size={15} /> : <EyeOff size={15} />}
-                <span>{hideReciteText ? '本文を表示' : '本文を隠す'}</span>
+                1句ずつ暗唱
               </button>
               <button
                 type="button"
-                className="btn btn-sm"
-                disabled={safeReciteIdx === 0}
+                className={`seg-btn ${reciteUnit === 'section' ? 'active' : ''}`}
                 onClick={() => {
                   rec.reset();
-                  setRecitePhraseIdx((i) => Math.max(0, i - 1));
+                  setReciteUnit('section');
                 }}
               >
-                前の句
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm"
-                disabled={safeReciteIdx + 1 >= activePhrases.length}
-                onClick={() => {
-                  rec.reset();
-                  setRecitePhraseIdx((i) => Math.min(activePhrases.length - 1, i + 1));
-                }}
-              >
-                次の句
+                1段まるごと暗唱
               </button>
             </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setHideReciteText((v) => !v)}
+            >
+              {hideReciteText ? <Eye size={15} /> : <EyeOff size={15} />}
+              <span>{hideReciteText ? '本文を表示' : '本文を隠す'}</span>
+            </button>
+            {hideReciteText && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setShowCueInitials((v) => !v)}
+              >
+                <span>{showCueInitials ? '頭文字ヒント ON' : '頭文字ヒント OFF'}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={reciteUnit === 'phrase' ? safeReciteIdx === 0 : safeReciteSecIdx === 0}
+              onClick={() => {
+                rec.reset();
+                if (reciteUnit === 'phrase') setRecitePhraseIdx((i) => Math.max(0, i - 1));
+                else setReciteSectionIdx((i) => Math.max(0, i - 1));
+              }}
+            >
+              {reciteUnit === 'phrase' ? '前の句' : '前の段'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={
+                reciteUnit === 'phrase'
+                  ? safeReciteIdx + 1 >= activePhrases.length
+                  : safeReciteSecIdx + 1 >= activeReciteSections.length
+              }
+              onClick={() => {
+                rec.reset();
+                if (reciteUnit === 'phrase') {
+                  setRecitePhraseIdx((i) => Math.min(activePhrases.length - 1, i + 1));
+                } else {
+                  setReciteSectionIdx((i) => Math.min(activeReciteSections.length - 1, i + 1));
+                }
+              }}
+            >
+              {reciteUnit === 'phrase' ? '次の句' : '次の段'}
+            </button>
+            <span className="pill-badge">
+              {reciteUnit === 'phrase'
+                ? `${safeReciteIdx + 1} / ${activePhrases.length} 句`
+                : `${safeReciteSecIdx + 1} / ${activeReciteSections.length} 段（${currentReciteSection?.title ?? ''}）`}
+            </span>
           </div>
 
           {!rec.isSupported && (
@@ -749,140 +859,251 @@ export function AudioView({
             </div>
           )}
 
-          {currentRecitePhrase && (
-            <>
-              <div
-                style={{
-                  padding: '18px 16px',
-                  borderRadius: 10,
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-elevated)',
-                  marginBottom: 14,
-                }}
-              >
-                {hideReciteText ? (
-                  <div>
-                    <div style={{ fontWeight: 700, color: 'var(--shu)', marginBottom: 6 }}>
-                      暗唱中（本文非表示）
-                    </div>
-                    <div className="muted">
-                      意味ガイド：{currentRecitePhrase.translation}
-                    </div>
+          {/* Target Prompt Box */}
+          {reciteUnit === 'phrase' && currentRecitePhrase && (
+            <div
+              style={{
+                padding: '16px',
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-elevated)',
+                marginBottom: 14,
+              }}
+            >
+              {hideReciteText ? (
+                <div>
+                  <div style={{ fontWeight: 700, color: 'var(--shu)', marginBottom: 6 }}>
+                    暗唱中（本文非表示）
                   </div>
-                ) : (
-                  <RubyText
-                    tokens={currentRecitePhrase.tokens}
-                    rubyMode={rubyMode}
-                    fontSize={fontSize}
-                  />
-                )}
+                  {showCueInitials && (
+                    <div style={{ fontFamily: 'var(--font-serif)', fontSize: 18, marginBottom: 6 }}>
+                      頭文字：{Array.from(getPhrasePlainText(currentRecitePhrase))[0] ?? ''}……
+                    </div>
+                  )}
+                  <div className="muted">意味ガイド：{currentRecitePhrase.translation}</div>
+                </div>
+              ) : (
+                <RubyText
+                  tokens={currentRecitePhrase.tokens}
+                  rubyMode={rubyMode}
+                  fontSize={fontSize}
+                />
+              )}
+            </div>
+          )}
+
+          {reciteUnit === 'section' && currentReciteSection && (
+            <div
+              style={{
+                padding: '16px',
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-elevated)',
+                marginBottom: 14,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: 'var(--shu)', marginBottom: 8 }}>
+                {currentReciteSection.title}（全 {currentReciteSection.phrases.length} 句）
               </div>
-
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-                {rec.isListening ? (
-                  <button type="button" className="btn btn-primary" onClick={rec.stop}>
-                    <MicOff size={16} />
-                    <span>録音を止める</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn-ai"
-                    disabled={!rec.isSupported}
-                    onClick={rec.start}
-                  >
-                    <Mic size={16} />
-                    <span>マイクで暗唱スタート</span>
-                  </button>
-                )}
-
-                <button type="button" className="btn" onClick={rec.reset}>
-                  <RotateCcw size={15} />
-                  <span>やり直す</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => onPlaySamplePhrase(currentRecitePhrase)}
-                >
-                  <Volume2 size={15} />
-                  <span>お手本を聞く</span>
-                </button>
-              </div>
-
-              {rec.error && (
-                <div style={{ color: 'var(--shu)', fontSize: 13.5, marginBottom: 10 }}>
-                  {rec.error}
+              {hideReciteText ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {currentReciteSection.phrases.map((ph, idx) => (
+                    <div key={ph.id} style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+                      {idx + 1}.{' '}
+                      {showCueInitials
+                        ? `${Array.from(getPhrasePlainText(ph))[0] ?? ''}… （${ph.translation}）`
+                        : ph.translation}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {currentReciteSection.phrases.map((ph) => (
+                    <div key={ph.id}>
+                      <RubyText tokens={ph.tokens} rubyMode={rubyMode} fontSize={fontSize} />
+                    </div>
+                  ))}
                 </div>
               )}
+            </div>
+          )}
 
+          {/* Mic & Sample Audio Buttons */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+            {rec.isListening ? (
+              <button type="button" className="btn btn-primary" onClick={rec.stop}>
+                <MicOff size={16} />
+                <span>録音を止める</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-ai"
+                disabled={!rec.isSupported}
+                onClick={rec.start}
+              >
+                <Mic size={16} />
+                <span>マイクで暗唱スタート</span>
+              </button>
+            )}
+
+            <button type="button" className="btn" onClick={rec.reset}>
+              <RotateCcw size={15} />
+              <span>やり直す</span>
+            </button>
+
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                if (reciteUnit === 'phrase' && currentRecitePhrase) {
+                  onPlaySamplePhrase(currentRecitePhrase);
+                } else if (reciteUnit === 'section' && currentReciteSection) {
+                  onStopTts();
+                  if (!realAudio.playSection(currentReciteSection, false)) {
+                    onPlayTtsPhrases(currentReciteSection.phrases);
+                  }
+                }
+              }}
+            >
+              <Volume2 size={15} />
+              <span>お手本を聞く</span>
+            </button>
+          </div>
+
+          {rec.error && (
+            <div style={{ color: 'var(--shu)', fontSize: 13.5, marginBottom: 10 }}>{rec.error}</div>
+          )}
+
+          {/* Recognition Output & Token-level Evaluation */}
+          <div
+            style={{
+              padding: 14,
+              borderRadius: 10,
+              background: 'var(--bg-subtle)',
+            }}
+          >
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>
+              音声認識されたテキスト：
+            </div>
+            <div style={{ minHeight: 28, fontSize: 15 }}>
+              {rec.combinedTranscript || (
+                <span className="muted">ここに読み上げた内容が表示されます…</span>
+              )}
+            </div>
+
+            {reciteUnit === 'phrase' && phraseEval && rec.combinedTranscript.length > 0 && (
               <div
                 style={{
-                  padding: 14,
-                  borderRadius: 10,
-                  background: 'var(--bg-subtle)',
-                  marginBottom: 14,
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTop: '1px dashed var(--border-strong)',
                 }}
               >
-                <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>
-                  音声認識されたテキスト：
-                </div>
-                <div style={{ minHeight: 28, fontSize: 15 }}>
-                  {rec.combinedTranscript || (
-                    <span className="muted">ここに読み上げた内容が表示されます…</span>
-                  )}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    marginBottom: 10,
+                  }}
+                >
+                  <span
+                    className={`pill-badge ${phraseEval.score >= 80 ? 'matsu' : 'shu'}`}
+                  >
+                    一致率：{phraseEval.score}%（{phraseEval.matchedCount}/{phraseEval.totalCount}語）
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-matsu"
+                    onClick={() => recordAndAdvancePhrase(phraseEval.score)}
+                  >
+                    <CheckCircle2 size={15} />
+                    <span>この結果で記録して次へ</span>
+                  </button>
                 </div>
 
-                {comparison && rec.combinedTranscript.length > 0 && (
-                  <div
-                    style={{
-                      marginTop: 12,
-                      paddingTop: 12,
-                      borderTop: '1px dashed var(--border-strong)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                      <span
-                        className={`pill-badge ${comparison.score >= 80 ? 'matsu' : 'shu'}`}
-                      >
-                        一致率：{comparison.score}%
+                <div style={{ lineHeight: 2.1, fontFamily: 'var(--font-serif)', fontSize: 19 }}>
+                  {phraseEval.tokenResults.map((tr, i) =>
+                    tr.isPunct ? (
+                      <span key={i}>{tr.text}</span>
+                    ) : (
+                      <span key={i} className={`token-chip ${tr.status}`}>
+                        {tr.text}
                       </span>
-                      {comparison.score < 80 && (
-                        <button
-                          type="button"
-                          className="btn btn-sm"
-                          style={{ color: 'var(--shu)', borderColor: 'var(--shu)' }}
-                          onClick={() => onMarkPhraseStatus(currentRecitePhrase.id, 'shaky')}
-                        >
-                          苦手フレーズに登録する
-                        </button>
-                      )}
-                      {comparison.score >= 80 && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-matsu"
-                          onClick={() => onMarkPhraseStatus(currentRecitePhrase.id, 'mastered')}
-                        >
-                          覚えた！に記録
-                        </button>
-                      )}
-                    </div>
-                    <div style={{ lineHeight: 2, fontSize: 15 }}>
-                      {comparison.segments.map((seg, i) => (
-                        <span
-                          key={i}
-                          className={`char-match ${seg.matched ? 'ok' : 'miss'}`}
-                        >
-                          {seg.char}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                    )
+                  )}
+                </div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                  緑＝言えた ／ 黄＝惜しい ／ 赤波線＝抜け・誤認識
+                </div>
               </div>
-            </>
-          )}
+            )}
+
+            {reciteUnit === 'section' && sectionEvals && rec.combinedTranscript.length > 0 && (
+              <div
+                style={{
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTop: '1px dashed var(--border-strong)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    marginBottom: 10,
+                  }}
+                >
+                  <span
+                    className={`pill-badge ${sectionEvals.avgScore >= 80 ? 'matsu' : 'shu'}`}
+                  >
+                    段落平均一致率：{sectionEvals.avgScore}%
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-matsu"
+                    onClick={recordAndAdvanceSection}
+                  >
+                    <CheckCircle2 size={15} />
+                    <span>この段の判定をまとめて記録して次へ</span>
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {sectionEvals.evals.map(({ phrase, evalResult }) => (
+                    <div
+                      key={phrase.id}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      <div style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 4 }}>
+                        一致率 {evalResult.score}%
+                      </div>
+                      <div style={{ lineHeight: 2, fontFamily: 'var(--font-serif)', fontSize: 17 }}>
+                        {evalResult.tokenResults.map((tr, i) =>
+                          tr.isPunct ? (
+                            <span key={i}>{tr.text}</span>
+                          ) : (
+                            <span key={i} className={`token-chip ${tr.status}`}>
+                              {tr.text}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

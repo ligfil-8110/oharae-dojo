@@ -8,7 +8,7 @@ import { PhraseEditorModal } from './components/PhraseEditorModal.tsx';
 import { PlanView } from './components/PlanView.tsx';
 import { ReadView } from './components/ReadView.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
-import { PHRASE_AUDIO_TIMESTAMPS } from './data/audioTimestamps.ts';
+import { WriteView } from './components/WriteView.tsx';
 import { useAudioTrack } from './hooks/useAudioTrack.ts';
 import { useSpeechSynthesis } from './hooks/useSpeechSynthesis.ts';
 import { useStudyStore } from './hooks/useStudyStore.ts';
@@ -41,7 +41,7 @@ export function App() {
   const [editingPhrase, setEditingPhrase] = useState<Phrase | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const realAudio = useAudioTrack();
+  const realAudio = useAudioTrack(store.customOverrides);
   const tts = useSpeechSynthesis({
     rate: store.settings.speechRate,
     pauseSec: store.settings.shadowingPauseSec,
@@ -50,7 +50,7 @@ export function App() {
 
   const handlePlayPhrasePreferReal = useCallback(
     (phrase: Phrase) => {
-      if (store.settings.preset === 'maosu' && PHRASE_AUDIO_TIMESTAMPS[phrase.id]) {
+      if (store.settings.preset === 'maosu' && realAudio.effectiveTimestamps[phrase.id]) {
         tts.stop();
         realAudio.playPhrase(phrase.id, false);
         return;
@@ -76,10 +76,11 @@ export function App() {
   const handlePlayAllVisiblePreferReal = useCallback(
     (visibleSections: Section[]) => {
       if (store.settings.preset === 'maosu' && visibleSections.length > 0) {
-        const firstRange = PHRASE_AUDIO_TIMESTAMPS[visibleSections[0].phrases[0]?.id ?? ''];
+        const firstRange =
+          realAudio.effectiveTimestamps[visibleSections[0].phrases[0]?.id ?? ''];
         const lastSec = visibleSections[visibleSections.length - 1];
         const lastPhrase = lastSec.phrases[lastSec.phrases.length - 1];
-        const lastRange = PHRASE_AUDIO_TIMESTAMPS[lastPhrase?.id ?? ''];
+        const lastRange = realAudio.effectiveTimestamps[lastPhrase?.id ?? ''];
         if (firstRange && lastRange) {
           tts.stop();
           realAudio.playRange(firstRange.start, lastRange.end, { loop: false });
@@ -187,6 +188,17 @@ export function App() {
           />
         )}
 
+        {activeTab === 'write' && (
+          <WriteView
+            sections={sections}
+            progress={store.progress}
+            rubyMode={store.settings.rubyMode}
+            fontSize={store.settings.fontSize}
+            onGradePhrase={setPhraseMastery}
+            onPlayPhrase={handlePlayPhrasePreferReal}
+          />
+        )}
+
         {activeTab === 'audio' && (
           <AudioView
             sections={sections}
@@ -244,6 +256,11 @@ export function App() {
         <PhraseEditorModal
           phrase={editingPhrase}
           existingOverride={store.customOverrides[editingPhrase.id]}
+          defaultAudioRange={realAudio.effectiveTimestamps[editingPhrase.id]}
+          onPreviewAudioRange={(start, end) => {
+            tts.stop();
+            realAudio.playRange(start, end, { loop: false });
+          }}
           onSave={savePhraseOverride}
           onReset={resetPhraseOverride}
           onClose={() => setEditingPhrase(null)}

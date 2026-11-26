@@ -5,6 +5,7 @@ import {
   GraduationCap,
   Mic,
   Moon,
+  PenTool,
   Settings,
   Sun,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ const NAV_ITEMS: Array<{ id: AppTab; label: string; shortLabel: string; icon: ty
   { id: 'plan', label: '7日間計画', shortLabel: '計画', icon: Calendar },
   { id: 'read', label: '通読・解説', shortLabel: '通読', icon: BookOpen },
   { id: 'cloze', label: '穴埋め暗記', shortLabel: '穴埋め', icon: EyeOff },
+  { id: 'write', label: '書き下し', shortLabel: '書き下し', icon: PenTool },
   { id: 'audio', label: '音読・暗唱', shortLabel: '音声', icon: Mic },
   { id: 'exam', label: '模擬試験', shortLabel: '試験', icon: GraduationCap },
 ];

@@ -32,7 +32,7 @@ export type WritingMode = 'horizontal' | 'vertical';
 export type MasteryStatus = 'unstarted' | 'learning' | 'shaky' | 'mastered';
 export type ThemeMode = 'washi' | 'sumi';
 export type FontSize = 'sm' | 'md' | 'lg';
-export type AppTab = 'plan' | 'read' | 'cloze' | 'audio' | 'exam';
+export type AppTab = 'plan' | 'read' | 'cloze' | 'write' | 'audio' | 'exam';
 
 export interface PhraseProgress {
   status: MasteryStatus;
@@ -58,6 +58,8 @@ export interface CustomPhraseOverride {
   rawRubyText: string;
   translation?: string;
   ttsOverride?: string;
+  audioStart?: number;
+  audioEnd?: number;
 }
 
 export interface StudyStoreData {

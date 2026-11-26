@@ -146,6 +146,12 @@ export function App() {
             onUpdateExamDate={(examDate) => updateSettings({ examDate })}
             onToggleDayCompleted={toggleDayCompleted}
             onJumpToStudy={handleJumpToStudy}
+            onPlayDayAudio={(sectionIds) => {
+              const target = sections.filter((s) => sectionIds.includes(s.id));
+              if (target.length > 0) {
+                handlePlayAllVisiblePreferReal(target);
+              }
+            }}
           />
         )}
 

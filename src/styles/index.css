@@ -846,3 +846,214 @@ button {
   color: var(--text-faint);
   pointer-events: none;
 }
+
+/* DQ10-inspired Mythological SVG Theater & Animations */
+@keyframes mythSpinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes mythSpinRev {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes mythFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes mythPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.97);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+}
+
+@keyframes mythDriftL {
+  0%,
+  100% {
+    transform: translateX(0px);
+  }
+  50% {
+    transform: translateX(-11px);
+  }
+}
+
+@keyframes mythDriftR {
+  0%,
+  100% {
+    transform: translateX(0px);
+  }
+  50% {
+    transform: translateX(11px);
+  }
+}
+
+@keyframes mythDashFlow {
+  from {
+    stroke-dashoffset: 64;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes mythSparkRise {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.7);
+  }
+  30% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px) scale(1.15);
+  }
+}
+
+@keyframes mythMiasma {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translate(0px, 0px) scale(1);
+  }
+  50% {
+    opacity: 0.88;
+    transform: translate(-4px, -6px) scale(1.05);
+  }
+}
+
+.myth-spin-slow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mythSpinSlow 28s linear infinite;
+}
+
+.myth-spin-rev {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mythSpinRev 36s linear infinite;
+}
+
+.myth-float {
+  animation: mythFloat 4.5s ease-in-out infinite;
+}
+
+.myth-float-delay {
+  animation: mythFloat 4.5s ease-in-out 1.4s infinite;
+}
+
+.myth-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mythPulse 3.6s ease-in-out infinite;
+}
+
+.myth-drift-l {
+  animation: mythDriftL 6s ease-in-out infinite;
+}
+
+.myth-drift-r {
+  animation: mythDriftR 6s ease-in-out infinite;
+}
+
+.myth-flow {
+  stroke-dasharray: 10 6;
+  animation: mythDashFlow 2.6s linear infinite;
+}
+
+.myth-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mythSparkRise 4.2s ease-out infinite;
+}
+
+.myth-miasma {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mythMiasma 5.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .myth-spin-slow,
+  .myth-spin-rev,
+  .myth-float,
+  .myth-float-delay,
+  .myth-pulse,
+  .myth-drift-l,
+  .myth-drift-r,
+  .myth-flow,
+  .myth-spark,
+  .myth-miasma {
+    animation: none !important;
+  }
+}
+
+.myth-theater {
+  border: 1.5px solid color-mix(in srgb, var(--kin) 55%, var(--border));
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow-md);
+}
+
+.myth-stage {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--kin) 45%, transparent);
+  background: #0c142c;
+}
+
+.myth-stage svg,
+.myth-card-banner svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.myth-card-banner {
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--kin) 35%, var(--border));
+  margin-bottom: 10px;
+  background: #0c142c;
+}
+
+.myth-anchor-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.myth-anchor-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--kin-soft);
+  border: 1px solid color-mix(in srgb, var(--kin) 40%, transparent);
+  color: var(--text-main);
+}

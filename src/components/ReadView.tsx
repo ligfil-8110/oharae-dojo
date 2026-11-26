@@ -7,6 +7,7 @@ import {
   EyeOff,
   Lightbulb,
   Play,
+  Sparkles,
   Square,
   Volume2,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ import type {
   Section,
   WritingMode,
 } from '../types.ts';
+import { DayMythSvg } from './DayMythSvg.tsx';
 import { RubyText } from './RubyText.tsx';
 
 interface ReadViewProps {
@@ -63,6 +65,7 @@ export function ReadView({
 }: ReadViewProps) {
   const [showTranslations, setShowTranslations] = useState(true);
   const [showFlowMap, setShowFlowMap] = useState(false);
+  const [showMythVisuals, setShowMythVisuals] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const visibleSections =
@@ -138,14 +141,24 @@ export function ReadView({
         </div>
 
         {writingMode === 'horizontal' && (
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => setShowTranslations((v) => !v)}
-          >
-            {showTranslations ? <Eye size={15} /> : <EyeOff size={15} />}
-            <span>{showTranslations ? '現代語訳 ON' : '現代語訳 OFF'}</span>
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setShowTranslations((v) => !v)}
+            >
+              {showTranslations ? <Eye size={15} /> : <EyeOff size={15} />}
+              <span>{showTranslations ? '現代語訳 ON' : '現代語訳 OFF'}</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setShowMythVisuals((v) => !v)}
+            >
+              <Sparkles size={15} />
+              <span>{showMythVisuals ? '神話ビジュアル ON' : '神話ビジュアル OFF'}</span>
+            </button>
+          </>
         )}
 
         <button
@@ -250,9 +263,20 @@ export function ReadView({
       ) : (
         /* Horizontal Cards Mode */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {visibleSections.map((sec) => (
-            <article key={sec.id} className="card">
-              <div
+          {visibleSections.map((sec, secIdx) => {
+            const prevSec = secIdx > 0 ? visibleSections[secIdx - 1] : null;
+            const showDayBanner =
+              showMythVisuals &&
+              (!prevSec || prevSec.recommendedDay !== sec.recommendedDay);
+
+            return (
+              <article key={sec.id} className="card">
+                {showDayBanner && (
+                  <div className="myth-card-banner">
+                    <DayMythSvg day={sec.recommendedDay} compact />
+                  </div>
+                )}
+                <div
                 style={{
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -380,7 +404,8 @@ export function ReadView({
                 })}
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

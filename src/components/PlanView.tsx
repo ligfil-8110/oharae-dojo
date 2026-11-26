@@ -1,6 +1,17 @@
-import { ArrowRight, CheckCircle2, Circle, Flame, Play, Target } from 'lucide-react';
+import { useState } from 'react';
+import {
+  ArrowRight,
+  CheckCircle2,
+  Circle,
+  Flame,
+  Play,
+  Sparkles,
+  Target,
+  Volume2,
+} from 'lucide-react';
 import { SEVEN_DAY_PLAN } from '../data/oharaeData.ts';
 import type { AppTab, PhraseProgress, Section } from '../types.ts';
+import { DAY_MYTH_META, DayMythSvg } from './DayMythSvg.tsx';
 
 interface PlanViewProps {
   sections: Section[];
@@ -21,6 +32,7 @@ interface PlanViewProps {
   onUpdateExamDate: (date: string) => void;
   onToggleDayCompleted: (day: number) => void;
   onJumpToStudy: (tab: AppTab, sectionIds?: string[], onlyWeak?: boolean) => void;
+  onPlayDayAudio?: (sectionIds: string[]) => void;
 }
 
 export function PlanView({
@@ -34,10 +46,15 @@ export function PlanView({
   onUpdateExamDate,
   onToggleDayCompleted,
   onJumpToStudy,
+  onPlayDayAudio,
 }: PlanViewProps) {
+  const [selectedMythDay, setSelectedMythDay] = useState<number>(currentRecommendedDay);
   const sectionMap = new Map(sections.map((s) => [s.id, s]));
   const todayPlan =
     SEVEN_DAY_PLAN.find((p) => p.day === currentRecommendedDay) ?? SEVEN_DAY_PLAN[0];
+  const selectedDayPlan =
+    SEVEN_DAY_PLAN.find((p) => p.day === selectedMythDay) ?? SEVEN_DAY_PLAN[0];
+  const mythMeta = DAY_MYTH_META[selectedMythDay] ?? DAY_MYTH_META[1];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -143,6 +160,92 @@ export function PlanView({
         </div>
       </section>
 
+      {/* Mythological Visual Memory Theater */}
+      <section className="myth-theater">
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 10,
+            marginBottom: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Sparkles size={18} style={{ color: 'var(--kin)' }} />
+            <h3 className="section-heading" style={{ margin: 0 }}>
+              神話ビジュアル記憶シアター（情景で覚える）
+            </h3>
+          </div>
+
+          <div className="seg-group" aria-label="シアターの日数選択">
+            {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+              <button
+                key={d}
+                type="button"
+                className={`seg-btn ${selectedMythDay === d ? 'active' : ''}`}
+                onClick={() => setSelectedMythDay(d)}
+              >
+                Day {d}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="myth-stage">
+          <DayMythSvg day={selectedMythDay} />
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--kin)', marginBottom: 4 }}>
+            Day {selectedMythDay} ・ {mythMeta.motif}
+          </div>
+          <h4 style={{ margin: '0 0 6px', fontFamily: 'var(--font-serif)', fontSize: 17 }}>
+            {mythMeta.sceneTitle}
+          </h4>
+          <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>
+            {mythMeta.visualStory}
+          </p>
+
+          <div className="myth-anchor-row">
+            {mythMeta.anchors.map((a) => (
+              <span key={a} className="myth-anchor-chip">
+                {a}
+              </span>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+            {onPlayDayAudio && (
+              <button
+                type="button"
+                className="btn btn-sm btn-ai"
+                onClick={() => onPlayDayAudio(selectedDayPlan.sectionIds)}
+              >
+                <Volume2 size={14} />
+                <span>この日の範囲を音声で聴く</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => onJumpToStudy('read', selectedDayPlan.sectionIds)}
+            >
+              <span>通読で確認</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={() => onJumpToStudy('cloze', selectedDayPlan.sectionIds)}
+            >
+              <Target size={14} />
+              <span>この日を穴埋め暗記</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* 7-Day Curriculum */}
       <section>
         <h3 className="section-heading" style={{ marginBottom: 10 }}>
@@ -173,6 +276,18 @@ export function PlanView({
                   opacity: isCompleted ? 0.85 : 1,
                 }}
               >
+                <div
+                  className="myth-card-banner"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => {
+                    setSelectedMythDay(plan.day);
+                    window.scrollTo({ top: 140, behavior: 'smooth' });
+                  }}
+                  title="クリックして神話シアターで拡大表示"
+                >
+                  <DayMythSvg day={plan.day} compact />
+                </div>
+
                 <div
                   style={{
                     display: 'flex',

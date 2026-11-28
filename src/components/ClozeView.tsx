@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
   ChevronLeft,
@@ -105,6 +105,18 @@ export function ClozeView({
   const safeIndex = Math.min(currentIndex, Math.max(0, targetPhrases.length - 1));
   const currentItem = targetPhrases[safeIndex];
   const prevItem = safeIndex > 0 ? targetPhrases[safeIndex - 1] : null;
+  const currentStatus: MasteryStatus = currentItem
+    ? (progress[currentItem.phrase.id]?.status ?? 'unstarted')
+    : 'unstarted';
+  const advanceTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (advanceTimerRef.current !== null) {
+        window.clearTimeout(advanceTimerRef.current);
+      }
+    };
+  }, []);
 
   const resetCardVisibility = useCallback(() => {
     setRevealedTokens(new Set());
@@ -113,6 +125,10 @@ export function ClozeView({
   }, []);
 
   const goPrev = useCallback(() => {
+    if (advanceTimerRef.current !== null) {
+      window.clearTimeout(advanceTimerRef.current);
+      advanceTimerRef.current = null;
+    }
     if (safeIndex > 0) {
       setCurrentIndex(safeIndex - 1);
       resetCardVisibility();
@@ -120,6 +136,10 @@ export function ClozeView({
   }, [safeIndex, resetCardVisibility]);
 
   const goNext = useCallback(() => {
+    if (advanceTimerRef.current !== null) {
+      window.clearTimeout(advanceTimerRef.current);
+      advanceTimerRef.current = null;
+    }
     if (safeIndex + 1 < targetPhrases.length) {
       setCurrentIndex(safeIndex + 1);
       resetCardVisibility();
@@ -130,9 +150,16 @@ export function ClozeView({
     (status: MasteryStatus) => {
       if (!currentItem) return;
       onGradePhrase(currentItem.phrase.id, status);
+      if (advanceTimerRef.current !== null) {
+        window.clearTimeout(advanceTimerRef.current);
+      }
       if (safeIndex + 1 < targetPhrases.length) {
-        setCurrentIndex(safeIndex + 1);
-        resetCardVisibility();
+        const nextIdx = safeIndex + 1;
+        advanceTimerRef.current = window.setTimeout(() => {
+          advanceTimerRef.current = null;
+          setCurrentIndex(nextIdx);
+          resetCardVisibility();
+        }, 180);
       }
     },
     [currentItem, onGradePhrase, safeIndex, targetPhrases.length, resetCardVisibility]
@@ -433,23 +460,21 @@ export function ClozeView({
           >
             <button
               type="button"
-              className="btn"
-              style={{ borderColor: 'var(--shu)', color: 'var(--shu)' }}
+              className={`btn btn-grade-shu ${currentStatus === 'shaky' ? 'selected' : ''}`}
               onClick={() => handleGrade('shaky')}
             >
               <span>1. 苦手・もう一度</span>
             </button>
             <button
               type="button"
-              className="btn"
-              style={{ borderColor: 'var(--kin)', color: 'var(--kin)' }}
+              className={`btn btn-grade-kin ${currentStatus === 'learning' ? 'selected' : ''}`}
               onClick={() => handleGrade('learning')}
             >
               <span>2. あやふや</span>
             </button>
             <button
               type="button"
-              className="btn btn-matsu"
+              className={`btn btn-grade-matsu ${currentStatus === 'mastered' ? 'selected' : ''}`}
               onClick={() => handleGrade('mastered')}
             >
               <CheckCircle2 size={16} />

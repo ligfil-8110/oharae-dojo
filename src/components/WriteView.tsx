@@ -82,6 +82,18 @@ export function WriteView({
 
   const safeIdx = Math.min(currentIndex, Math.max(0, targetPhrases.length - 1));
   const currentItem = targetPhrases[safeIdx];
+  const currentStatus: MasteryStatus = currentItem
+    ? (progress[currentItem.phrase.id]?.status ?? 'unstarted')
+    : 'unstarted';
+  const advanceTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (advanceTimerRef.current !== null) {
+        window.clearTimeout(advanceTimerRef.current);
+      }
+    };
+  }, []);
 
   const resetInputsForPhrase = useCallback(() => {
     setBlankInputs({});
@@ -122,9 +134,16 @@ export function WriteView({
   const handleRecordAndNext = (status: MasteryStatus) => {
     if (!currentItem) return;
     onGradePhrase(currentItem.phrase.id, status);
+    if (advanceTimerRef.current !== null) {
+      window.clearTimeout(advanceTimerRef.current);
+    }
     if (safeIdx + 1 < targetPhrases.length) {
-      setCurrentIndex(safeIdx + 1);
-      resetInputsForPhrase();
+      const nextIdx = safeIdx + 1;
+      advanceTimerRef.current = window.setTimeout(() => {
+        advanceTimerRef.current = null;
+        setCurrentIndex(nextIdx);
+        resetInputsForPhrase();
+      }, 180);
     }
   };
 
@@ -477,15 +496,14 @@ export function WriteView({
                 >
                   <button
                     type="button"
-                    className="btn"
-                    style={{ borderColor: 'var(--shu)', color: 'var(--shu)' }}
+                    className={`btn btn-grade-shu ${currentStatus === 'shaky' ? 'selected' : ''}`}
                     onClick={() => handleRecordAndNext('shaky')}
                   >
                     苦手に登録して次へ
                   </button>
                   <button
                     type="button"
-                    className="btn btn-matsu"
+                    className={`btn btn-grade-matsu ${currentStatus === 'mastered' ? 'selected' : ''}`}
                     onClick={() => handleRecordAndNext('mastered')}
                   >
                     書けた！覚えた！次へ
@@ -669,15 +687,14 @@ export function WriteView({
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <button
                       type="button"
-                      className="btn"
-                      style={{ borderColor: 'var(--shu)', color: 'var(--shu)' }}
+                      className={`btn btn-grade-shu ${currentStatus === 'shaky' ? 'selected' : ''}`}
                       onClick={() => handleRecordAndNext('shaky')}
                     >
                       苦手・もう一度
                     </button>
                     <button
                       type="button"
-                      className="btn btn-matsu"
+                      className={`btn btn-grade-matsu ${currentStatus === 'mastered' ? 'selected' : ''}`}
                       onClick={() => handleRecordAndNext('mastered')}
                     >
                       書けた！覚えた！次へ
@@ -823,15 +840,14 @@ export function WriteView({
                   >
                     <button
                       type="button"
-                      className="btn"
-                      style={{ borderColor: 'var(--shu)', color: 'var(--shu)' }}
+                      className={`btn btn-grade-shu ${currentStatus === 'shaky' ? 'selected' : ''}`}
                       onClick={() => handleRecordAndNext('shaky')}
                     >
                       書けなかった（× 苦手登録）
                     </button>
                     <button
                       type="button"
-                      className="btn btn-matsu"
+                      className={`btn btn-grade-matsu ${currentStatus === 'mastered' ? 'selected' : ''}`}
                       onClick={() => handleRecordAndNext('mastered')}
                     >
                       <CheckCircle2 size={16} />

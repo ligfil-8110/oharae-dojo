@@ -387,6 +387,60 @@ button {
   filter: brightness(0.92);
 }
 
+.btn-grade-shu {
+  border-color: var(--shu);
+  color: var(--shu);
+  background: var(--bg-card);
+}
+
+.btn-grade-shu:hover:not(:disabled) {
+  background: var(--shu-soft);
+  border-color: var(--shu);
+}
+
+.btn-grade-shu.selected,
+.btn-grade-shu:active:not(:disabled) {
+  background: var(--shu);
+  border-color: var(--shu);
+  color: #fff;
+}
+
+.btn-grade-kin {
+  border-color: var(--kin);
+  color: var(--kin);
+  background: var(--bg-card);
+}
+
+.btn-grade-kin:hover:not(:disabled) {
+  background: var(--kin-soft);
+  border-color: var(--kin);
+}
+
+.btn-grade-kin.selected,
+.btn-grade-kin:active:not(:disabled) {
+  background: var(--kin);
+  border-color: var(--kin);
+  color: #fff;
+}
+
+.btn-grade-matsu {
+  border-color: var(--matsu);
+  color: var(--matsu);
+  background: var(--bg-card);
+}
+
+.btn-grade-matsu:hover:not(:disabled) {
+  background: var(--matsu-soft);
+  border-color: var(--matsu);
+}
+
+.btn-grade-matsu.selected,
+.btn-grade-matsu:active:not(:disabled) {
+  background: var(--matsu);
+  border-color: var(--matsu);
+  color: #fff;
+}
+
 .btn-sm {
   min-height: 34px;
   padding: 5px 11px;

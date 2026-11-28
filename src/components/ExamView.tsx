@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Award, Check, Eye, Play, RotateCcw, Timer, X } from 'lucide-react';
 import type { FontSize, MasteryStatus, Phrase, RubyMode, Section } from '../types.ts';
 import { RubyText } from './RubyText.tsx';
@@ -26,6 +26,14 @@ export function ExamView({
   const [revealed, setRevealed] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [results, setResults] = useState<Record<string, 'pass' | 'fail'>>({});
+  const [pendingMark, setPendingMark] = useState<'pass' | 'fail' | null>(null);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const examItems = useMemo(() => {
     const filteredSections = sections.filter((s) => {
@@ -64,15 +72,21 @@ export function ExamView({
     const item = examItems[index];
     if (!item) return;
 
+    setPendingMark(outcome);
     setResults((prev) => ({ ...prev, [item.phrase.id]: outcome }));
     onRecordResult(item.phrase.id, outcome === 'pass' ? 'mastered' : 'shaky');
 
-    if (index + 1 >= examItems.length) {
-      setPhase('finished');
-    } else {
-      setIndex((i) => i + 1);
-      setRevealed(false);
-    }
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      setPendingMark(null);
+      if (index + 1 >= examItems.length) {
+        setPhase('finished');
+      } else {
+        setIndex((i) => i + 1);
+        setRevealed(false);
+      }
+    }, 150);
   };
 
   const currentItem = examItems[index];
@@ -209,8 +223,7 @@ export function ExamView({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <button
               type="button"
-              className="btn"
-              style={{ borderColor: 'var(--shu)', color: 'var(--shu)' }}
+              className={`btn btn-grade-shu ${pendingMark === 'fail' ? 'selected' : ''}`}
               onClick={() => handleMark('fail')}
             >
               <X size={17} />
@@ -218,7 +231,7 @@ export function ExamView({
             </button>
             <button
               type="button"
-              className="btn btn-matsu"
+              className={`btn btn-grade-matsu ${pendingMark === 'pass' ? 'selected' : ''}`}
               onClick={() => handleMark('pass')}
             >
               <Check size={17} />
